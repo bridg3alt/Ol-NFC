@@ -1,0 +1,82 @@
+rules_version = '2';
+
+// Olvia security rules.
+// Health data: a document is readable only by its owner or that owner's linked
+// caregiver. Nothing is world-readable, and userId can never be reassigned.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    // A caregiver may read a user's data once that user's document names them.
+    function isCaregiverFor(userId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(userId))
+        && get(/databases/$(database)/documents/users/$(userId)).data.caregiverId == request.auth.uid;
+    }
+
+    function canRead(userId) {
+      return isOwner(userId) || isCaregiverFor(userId);
+    }
+
+    // Writes must keep userId pointing at the caller, so records cannot be
+    // created on someone else's behalf or moved between accounts.
+    function ownsIncoming() {
+      return signedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isCaregiverFor(userId);
+      allow create: if isOwner(userId);
+      // Role is set at signup and must not be self-escalated afterwards.
+      allow update: if isOwner(userId)
+                    && request.resource.data.role == resource.data.role;
+      allow delete: if false;
+    }
+
+    match /medications/{docId} {
+      allow read: if canRead(resource.data.userId);
+      allow create: if ownsIncoming();
+      allow update: if isOwner(resource.data.userId) && ownsIncoming();
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    match /schedules/{docId} {
+      allow read: if canRead(resource.data.userId);
+      allow create: if ownsIncoming();
+      allow update: if isOwner(resource.data.userId) && ownsIncoming();
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    match /intakes/{docId} {
+      allow read: if canRead(resource.data.userId);
+      allow create: if ownsIncoming();
+      // Intake history is an adherence record: correct status, never rewrite
+      // whose dose it was or when it was scheduled.
+      allow update: if isOwner(resource.data.userId)
+                    && ownsIncoming()
+                    && request.resource.data.scheduledTime == resource.data.scheduledTime
+                    && request.resource.data.scheduleId == resource.data.scheduleId;
+      allow delete: if false;
+    }
+
+    match /voicePrompts/{docId} {
+      allow read: if canRead(resource.data.userId);
+      allow create: if ownsIncoming();
+      allow update: if isOwner(resource.data.userId) && ownsIncoming();
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    // Anything not matched above stays closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

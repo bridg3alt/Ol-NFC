@@ -1,0 +1,181 @@
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Text size is set on <html>, so every rem-based size in the app scales with
+ * it. The display preferences panel swaps these classes.
+ */
+html {
+  font-size: 112.5%; /* 18px base instead of the browser's 16px */
+}
+html.text-size-large {
+  font-size: 125%; /* 20px */
+}
+html.text-size-xlarge {
+  font-size: 140%; /* 22.4px */
+}
+
+body {
+  @apply bg-canvas text-ink font-sans antialiased;
+  line-height: 1.6;
+}
+
+/* A thick, high-contrast focus ring for keyboard users on every element. */
+*:focus-visible {
+  outline: 3px solid #1f5e54;
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* Lets keyboard users jump past the navigation straight to the page. */
+.skip-link {
+  @apply sr-only;
+}
+.skip-link:focus {
+  @apply not-sr-only fixed top-3 left-3 z-[100] bg-white text-ink px-4 py-3 rounded-lg shadow-lg;
+}
+
+/* Honour the operating system's "reduce motion" setting. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ------------------------------------------------------------- components */
+
+/* Every button is at least 48px tall, the recommended minimum touch target. */
+.btn {
+  @apply inline-flex items-center justify-center gap-2 min-h-[48px] px-5 py-2.5 rounded-xl font-bold transition-colors;
+  @apply disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-primary {
+  @apply bg-primary-700 text-white hover:bg-primary-800;
+}
+
+.btn-secondary {
+  @apply bg-secondary-600 text-white hover:bg-secondary-700;
+}
+
+.btn-outline {
+  @apply border-2 border-primary-700 text-primary-700 bg-white hover:bg-primary-50;
+}
+
+.btn-ghost {
+  @apply text-gray-700 hover:bg-gray-100;
+}
+
+.btn-success {
+  @apply bg-success-700 text-white hover:bg-success-800;
+}
+
+.btn-danger {
+  @apply bg-error-700 text-white hover:bg-error-800;
+}
+
+/* The one big action on a screen, such as "I've taken it". */
+.btn-xl {
+  @apply min-h-[72px] px-8 text-xl w-full;
+}
+
+.btn-lg {
+  @apply min-h-[56px] px-6 text-lg;
+}
+
+.btn-sm {
+  @apply min-h-[40px] px-3 py-1.5 text-sm;
+}
+
+.card {
+  @apply bg-white rounded-2xl border border-stone-200 shadow-sm;
+}
+
+.input {
+  @apply w-full min-h-[48px] px-4 py-2.5 rounded-xl border-2 border-stone-300 bg-white text-ink;
+  @apply focus:outline-none focus:border-primary-600;
+  @apply placeholder:text-gray-500;
+}
+
+.label {
+  @apply block font-bold text-ink mb-2;
+}
+
+.badge {
+  @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-sm font-bold;
+}
+
+.badge-primary {
+  @apply bg-primary-100 text-primary-800;
+}
+
+.badge-success {
+  @apply bg-success-100 text-success-800;
+}
+
+.badge-warning {
+  @apply bg-warning-100 text-warning-900;
+}
+
+.badge-error {
+  @apply bg-error-100 text-error-800;
+}
+
+.badge-gray {
+  @apply bg-stone-100 text-stone-800;
+}
+
+.container-app {
+  @apply max-w-2xl mx-auto px-4;
+}
+
+@media (min-width: 1024px) {
+  .container-app {
+    @apply max-w-4xl;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* ----------------------------------------------------------- high contrast */
+/*
+ * Pure black on white, thicker borders, and no soft greys. Applied to <html>
+ * so it covers every page, including the landing page.
+ */
+html.high-contrast body {
+  background: #fff;
+  color: #000;
+}
+html.high-contrast [class*='text-gray-'],
+html.high-contrast [class*='text-stone-'],
+html.high-contrast [class*='text-ink'] {
+  color: #000 !important;
+}
+html.high-contrast .card,
+html.high-contrast .input {
+  border: 2px solid #000 !important;
+  box-shadow: none;
+}
+html.high-contrast .btn-primary {
+  background: #000;
+  color: #fff;
+}
+html.high-contrast .btn-outline {
+  border-color: #000;
+  color: #000;
+}
+html.high-contrast *:focus-visible {
+  outline: 4px solid #000;
+}
