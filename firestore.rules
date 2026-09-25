@@ -74,20 +74,6 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data.userId);
     }
 
-    match /devices/{docId} {
-      allow read: if canRead(resource.data.userId);
-      allow create: if ownsIncoming();
-      allow update: if isOwner(resource.data.userId) && ownsIncoming();
-      allow delete: if isOwner(resource.data.userId);
-    }
-
-    match /notifications/{docId} {
-      allow read: if canRead(resource.data.userId);
-      allow create: if ownsIncoming();
-      allow update: if isOwner(resource.data.userId) && ownsIncoming();
-      allow delete: if isOwner(resource.data.userId);
-    }
-
     // Anything not matched above stays closed.
     match /{document=**} {
       allow read, write: if false;

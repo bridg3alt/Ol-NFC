@@ -3,9 +3,10 @@ import './globals.css';
 import { Providers } from '@/components/Providers';
 
 export const metadata: Metadata = {
-  title: 'Olvia - Smart Medication Assistant',
-  description: 'Connect with your Ol smart assistive bottle to manage medications, track adherence, and receive personalized reminders.',
-  keywords: ['medication', 'smart bottle', 'healthcare', 'caregiver', 'reminders', 'adherence'],
+  title: 'Olvia - Tap-to-guide companion',
+  description:
+    'Olvia links everyday objects to simple guidance. Tap an NFC tag on a medicine compartment and your phone shows exactly what to do.',
+  keywords: ['medication', 'NFC', 'assistive technology', 'caregiver', 'accessibility'],
   authors: [{ name: 'Olvia Team' }],
   appleWebApp: {
     capable: true,
@@ -17,7 +18,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#0ea5e9',
+  themeColor: '#1f5e54',
 };
 
 export default function RootLayout({
@@ -27,10 +28,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-gray-50 antialiased">
-        <Providers>
-          {children}
-        </Providers>
+      <body className="min-h-screen">
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

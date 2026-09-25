@@ -14,7 +14,6 @@ import {
   query,
   where,
   orderBy,
-  limit as fsLimit,
   onSnapshot,
   serverTimestamp,
   Timestamp,
@@ -27,8 +26,6 @@ import {
   MedicationSchedule,
   MedicationIntake,
   VoicePrompt,
-  Notification,
-  BottleDevice,
   IntakeStatus,
 } from '@/types';
 
@@ -80,12 +77,10 @@ function mapSchedule(id: string, d: DocumentData): MedicationSchedule {
     userId: d.userId,
     times: d.times ?? [],
     daysOfWeek: d.daysOfWeek ?? [],
-    label: d.label,
-    customLabel: d.customLabel,
-    compartment: d.compartment,
-    reminderSettings: d.reminderSettings,
+    slot: d.slot,
+    tagColor: d.tagColor ?? 'blue',
+    caregiverInstruction: d.caregiverInstruction,
     voicePromptId: d.voicePromptId,
-    ledSettings: d.ledSettings,
     isActive: d.isActive ?? true,
     createdAt: toDate(d.createdAt),
     updatedAt: toDate(d.updatedAt),
@@ -101,10 +96,7 @@ function mapIntake(id: string, d: DocumentData): MedicationIntake {
     scheduledTime: toDate(d.scheduledTime),
     actualTime: toOptionalDate(d.actualTime),
     status: d.status,
-    compartment: d.compartment,
-    sensorData: d.sensorData
-      ? { ...d.sensorData, timestamp: toDate(d.sensorData.timestamp) }
-      : undefined,
+    slot: d.slot,
     confirmedBy: d.confirmedBy,
     notes: d.notes,
     createdAt: toDate(d.createdAt),
@@ -262,7 +254,7 @@ export async function getIntakesBetween(
 
 /**
  * Records an intake under a deterministic id (schedule + slot time), so the
- * same dose reported twice — a replayed bottle event, a double tap — updates
+ * same dose reported twice — a double tap, a retried request — updates
  * one document instead of inflating adherence with duplicates.
  */
 export async function recordIntake(
@@ -280,12 +272,6 @@ export async function recordIntake(
       scheduledTime: Timestamp.fromDate(intake.scheduledTime),
       actualTime: intake.actualTime
         ? Timestamp.fromDate(intake.actualTime)
-        : null,
-      sensorData: intake.sensorData
-        ? {
-            ...intake.sensorData,
-            timestamp: Timestamp.fromDate(intake.sensorData.timestamp),
-          }
         : null,
       createdAt: serverTimestamp(),
     },
@@ -354,113 +340,4 @@ export async function createVoicePrompt(
 
 export async function deleteVoicePrompt(id: string): Promise<void> {
   await deleteDoc(doc(getDb(), 'voicePrompts', id));
-}
-
-// ------------------------------------------------------------------- devices
-
-export async function saveDevice(
-  userId: string,
-  device: BottleDevice
-): Promise<void> {
-  await setDoc(
-    doc(getDb(), 'devices', `${userId}_${device.id}`),
-    {
-      ...stripUndefined(device),
-      userId,
-      lastSeen: serverTimestamp(),
-    },
-    { merge: true }
-  );
-}
-
-export async function getSavedDevice(
-  userId: string
-): Promise<BottleDevice | null> {
-  const snap = await getDocs(
-    query(
-      collection(getDb(), 'devices'),
-      where('userId', '==', userId),
-      fsLimit(1)
-    )
-  );
-  if (snap.empty) return null;
-
-  const d = snap.docs[0].data();
-  return {
-    id: d.id,
-    name: d.name,
-    macAddress: d.macAddress ?? '',
-    batteryLevel: d.batteryLevel ?? 0,
-    firmwareVersion: d.firmwareVersion ?? '',
-    isConnected: false,
-    lastSeen: toDate(d.lastSeen),
-    rssi: d.rssi ?? 0,
-  };
-}
-
-// -------------------------------------------------------------- notifications
-
-export function subscribeNotifications(
-  userId: string,
-  onChange: (items: Notification[]) => void,
-  onError?: (e: Error) => void
-): () => void {
-  const q = query(
-    collection(getDb(), 'notifications'),
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc'),
-    fsLimit(50)
-  );
-  return onSnapshot(
-    q,
-    (snap) =>
-      onChange(
-        snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            userId: data.userId,
-            type: data.type,
-            title: data.title,
-            message: data.message,
-            data: data.data,
-            isRead: data.isRead ?? false,
-            createdAt: toDate(data.createdAt),
-          };
-        })
-      ),
-    onError
-  );
-}
-
-export async function createNotification(
-  userId: string,
-  data: Omit<Notification, 'id' | 'userId' | 'createdAt'>
-): Promise<string> {
-  const ref = await addDoc(collection(getDb(), 'notifications'), {
-    ...stripUndefined(data),
-    userId,
-    createdAt: serverTimestamp(),
-  });
-  return ref.id;
-}
-
-export async function markNotificationRead(id: string): Promise<void> {
-  await updateDoc(doc(getDb(), 'notifications', id), { isRead: true });
-}
-
-export async function markAllNotificationsRead(
-  userId: string
-): Promise<void> {
-  const db = getDb();
-  const snap = await getDocs(
-    query(
-      collection(db, 'notifications'),
-      where('userId', '==', userId),
-      where('isRead', '==', false)
-    )
-  );
-  const batch = writeBatch(db);
-  snap.forEach((n) => batch.update(n.ref, { isRead: true }));
-  await batch.commit();
 }

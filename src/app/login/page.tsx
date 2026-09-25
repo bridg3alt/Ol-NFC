@@ -211,10 +211,10 @@ export default function LoginPage() {
 
         <div className="relative z-10">
           <h1 className="text-4xl font-display font-bold text-white mb-4">
-            Smart Medication<br />Assistant
+            Tap. Follow.<br />Confirm.
           </h1>
           <p className="text-white/80 text-lg max-w-md">
-            Connect with your Ol bottle to manage medications, track adherence, and receive personalized reminders.
+            Tap an Olvia sticker and your phone shows, and says, exactly what to do next.
           </p>
         </div>
 

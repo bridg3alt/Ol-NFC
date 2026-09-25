@@ -1,144 +1,77 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { ChevronDown, HelpCircle, Bluetooth, Pill, AlertTriangle } from 'lucide-react';
+import { TriangleAlert } from 'lucide-react';
 
+// Native <details>/<summary> gives an accessible expand/collapse for free:
+// keyboard, screen reader state and focus all work without extra code.
 const FAQS = [
   {
-    question: 'How do I connect my Ol bottle?',
+    question: 'How do I use an Olvia tag?',
     answer:
-      'Go to the Bottle page and tap Connect. Your browser will show a list of nearby devices — pick the one named "Ol Bottle". Web Bluetooth only works in Chrome, Edge, and Opera on desktop or Android; Safari and iOS are not supported.',
+      'Hold the top back of your phone flat against the sticker for a second. Your phone reads the link on the sticker and opens the right Olvia screen.',
   },
   {
-    question: 'Do reminders still work if my phone is off?',
+    question: 'Nothing happens when I tap. What should I check?',
     answer:
-      'Yes. The bottle stores its own copy of your schedule, so LED, buzzer, and vibration reminders fire on time even with no phone nearby. Push your latest schedule from the Bottle page after making changes.',
+      'Make sure NFC is switched on in your phone settings and the screen is unlocked. On many phones the reader is near the camera, so try moving the phone slightly.',
   },
   {
-    question: 'What happens if the bottle is out of range when I take a dose?',
+    question: 'What happens when the medicine alarm rings?',
     answer:
-      'The bottle records the intake in its own memory and replays it the next time it connects. Nothing is lost — your adherence history fills in once you reconnect.',
+      'Tap the sticker on the bottle to stop it. Olvia then tells you which compartment to use and its sticker colour. Tap that sticker, take the medicine, and press "I\'ve taken it".',
   },
   {
-    question: 'How is a dose marked as taken?',
+    question: 'What if I tap the wrong compartment?',
     answer:
-      'A sensor inside each compartment detects the pill leaving. That reading is what marks the dose taken, not the clock. You can also mark a dose manually from the dashboard.',
+      'Olvia says "wrong compartment", repeats the instructions, and waits for you to tap the right one. Nothing is recorded until you tap the correct sticker.',
   },
   {
-    question: 'What does each compartment label mean?',
+    question: 'What does my caregiver see?',
     answer:
-      'BB is before breakfast, AB after breakfast, BL before lunch, AL after lunch, BD before dinner, AD after dinner. You can also set a custom label per schedule.',
+      'Whether each medicine was taken, when, and whether the alarm was stopped at the bottle. They do not see anything you did not do in Olvia.',
   },
   {
-    question: 'What if a compartment jams or runs empty?',
+    question: 'Is my medical information on the sticker?',
     answer:
-      'The bottle stops, reports the failure, and does not retry on its own. You will see a notification naming the compartment. Refill or clear it, then dispense again from the Bottle page.',
-  },
-  {
-    question: 'Can a caregiver see my adherence?',
-    answer:
-      'A caregiver account can be linked to your account. Once linked, they see your schedule and adherence reports and receive alerts for missed doses.',
+      'No. A sticker only holds a link naming the object, like "morning medicine". Your details stay in your account and only show after you sign in.',
   },
 ];
 
 export default function HelpPage() {
-  const [openIndex, setOpenIndex] = useState<number | null>(0);
-
   return (
     <DashboardLayout>
-      <div className="space-y-6 max-w-3xl">
+      <div className="space-y-6">
         <header>
-          <h1 className="text-2xl font-display font-semibold text-gray-900">Help</h1>
-          <p className="text-gray-500 mt-1">Guides and answers for using Olvia</p>
+          <h1 className="text-3xl font-bold">Help</h1>
+          <p className="text-lg text-gray-700 mt-1">Answers to common questions.</p>
         </header>
 
-        {/* Quick links */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <QuickLink
-            href="/bottle"
-            icon={<Bluetooth className="w-5 h-5" />}
-            title="Connect bottle"
-            description="Pair and sync your Ol bottle"
-          />
-          <QuickLink
-            href="/medications"
-            icon={<Pill className="w-5 h-5" />}
-            title="Add medication"
-            description="Set up what you take"
-          />
-          <QuickLink
-            href="/schedule"
-            icon={<HelpCircle className="w-5 h-5" />}
-            title="Build a schedule"
-            description="Times, days, and reminders"
-          />
-        </div>
-
-        {/* Safety */}
-        <div className="card p-5 bg-warning-50 border-warning-200">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-warning-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-warning-800">
-              <p className="font-medium">Olvia supports your routine — it does not replace medical advice</p>
-              <p className="mt-1">
-                Always follow the dosing instructions from your doctor or pharmacist.
-                If a reminder conflicts with their guidance, follow their guidance and
-                update your schedule. Contact your healthcare provider about any missed
-                or doubled dose.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* FAQs */}
-        <section className="card divide-y divide-gray-100">
-          {FAQS.map((faq, index) => (
-            <div key={faq.question}>
-              <button
-                onClick={() => setOpenIndex(openIndex === index ? null : index)}
-                className="w-full flex items-center justify-between gap-4 p-5 text-left hover:bg-gray-50 transition-colors"
-              >
-                <span className="font-medium text-gray-900">{faq.question}</span>
-                <ChevronDown
-                  className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${
-                    openIndex === index ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
-              {openIndex === index && (
-                <div className="px-5 pb-5 text-gray-600">{faq.answer}</div>
-              )}
-            </div>
+        <section className="card divide-y divide-stone-200">
+          {FAQS.map((faq) => (
+            <details key={faq.question} className="group">
+              <summary className="cursor-pointer list-none p-5 font-bold text-lg flex justify-between gap-4 min-h-[48px]">
+                {faq.question}
+                <span aria-hidden="true" className="group-open:rotate-45 text-2xl leading-none">
+                  +
+                </span>
+              </summary>
+              <p className="px-5 pb-5 text-gray-700">{faq.answer}</p>
+            </details>
           ))}
         </section>
+
+        <aside className="card p-5 border-warning-300 bg-warning-50 flex gap-3">
+          <TriangleAlert className="w-6 h-6 text-warning-800 shrink-0" aria-hidden="true" />
+          <div>
+            <p className="font-bold">Olvia supports your routine. It does not replace medical advice.</p>
+            <p className="mt-1">
+              Always follow your doctor or pharmacist. Ask them about any missed or
+              doubled dose.
+            </p>
+          </div>
+        </aside>
       </div>
     </DashboardLayout>
-  );
-}
-
-function QuickLink({
-  href,
-  icon,
-  title,
-  description,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="card p-5 hover:border-primary-300 hover:bg-primary-50 transition-all"
-    >
-      <div className="p-2 rounded-lg bg-primary-100 text-primary-600 w-fit mb-3">
-        {icon}
-      </div>
-      <p className="font-medium text-gray-900">{title}</p>
-      <p className="text-sm text-gray-500 mt-1">{description}</p>
-    </Link>
   );
 }

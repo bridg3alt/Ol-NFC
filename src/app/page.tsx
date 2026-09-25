@@ -1,502 +1,206 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import Link from 'next/link';
-import { useApp } from '@/context/AppContext';
-import { useAuth } from '@/context/AuthContext';
+import { useRouter } from 'next/navigation';
 import {
-  Pill,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
-  Battery,
-  Bluetooth,
-  Bell,
-  Settings,
-  Plus,
-  ChevronRight,
-  Mic,
-  Lightbulb,
+  Nfc,
+  Smartphone,
+  CircleCheck,
+  ShieldCheck,
+  HeartHandshake,
   Volume2,
-  Calendar,
-  TrendingUp,
-  User,
 } from 'lucide-react';
-import { format, formatDistanceToNow, differenceInMinutes } from 'date-fns';
-import DashboardLayout from '@/components/layout/DashboardLayout';
+import { useAuth } from '@/context/AuthContext';
+import { homePathFor } from '@/lib/roles';
 
-export default function HomePage() {
-  const { user, isAuthenticated } = useAuth();
-  const { dashboardData, markDoseTaken, markDoseSkipped } = useApp();
-  const [currentTime, setCurrentTime] = useState(new Date());
+/**
+ * The front door. Signed-out visitors see what Olvia is; signed-in people are
+ * sent straight to their own home screen, so the landing page never gets in
+ * the way of someone who just wants to use the app.
+ */
+export default function LandingPage() {
+  const { user, isLoading } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timer);
-  }, []);
+    if (!isLoading && user) router.replace(homePathFor(user.role));
+  }, [isLoading, user, router]);
 
-  const {
-    todaySchedule,
-    nextReminder,
-    adherenceStatus,
-    bottleConnection,
-    notifications,
-    quickStats,
-  } = dashboardData;
-
-  if (!isAuthenticated) {
-    return <LoginPrompt />;
+  if (isLoading || user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" role="status">
+        <span className="sr-only">Loading</span>
+        <span
+          aria-hidden="true"
+          className="w-10 h-10 border-4 border-primary-200 border-t-primary-700 rounded-full animate-spin"
+        />
+      </div>
+    );
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6 stagger-children">
-        {/* Header */}
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-display font-semibold text-gray-900">
-              Welcome back{user?.displayName ? `, ${user.displayName}` : ''}
-            </h1>
-            <p className="text-gray-500 mt-1">
-              {format(currentTime, 'EEEE, MMMM d, yyyy')}
-            </p>
-          </div>
-        </header>
+    <div className="min-h-screen">
+      <a href="#main" className="skip-link">
+        Skip to main content
+      </a>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <QuickStatCard
-            icon={<Pill className="w-5 h-5" />}
-            label="Medications"
-            value={quickStats.totalMedications.toString()}
-            color="primary"
-          />
-          <QuickStatCard
-            icon={<Calendar className="w-5 h-5" />}
-            label="Active Schedules"
-            value={quickStats.activeSchedules.toString()}
-            color="secondary"
-          />
-          <QuickStatCard
-            icon={<TrendingUp className="w-5 h-5" />}
-            label="Streak"
-            value={`${quickStats.streakDays} days`}
-            color="success"
-          />
-          <QuickStatCard
-            icon={<Clock className="w-5 h-5" />}
-            label="Next Dose"
-            value={nextReminder ? `${quickStats.nextDoseIn} min` : '—'}
-            color="warning"
-          />
+      <header className="container-app flex items-center justify-between h-20">
+        <div className="flex items-center gap-2">
+          <img src="/logo.jpeg" alt="" className="w-10 h-10 object-contain" />
+          <span className="font-bold text-2xl">Olvia</span>
         </div>
+        <Link href="/login" className="btn btn-outline btn-sm">
+          Sign in
+        </Link>
+      </header>
 
-        {/* Main Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Today's Schedule */}
-          <section className="card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Today's Schedule</h2>
-              <Link href="/schedule" className="text-primary-600 text-sm font-medium hover:underline flex items-center gap-1">
-                View all <ChevronRight className="w-4 h-4" />
-              </Link>
-            </div>
-            <div className="space-y-3">
-              {todaySchedule.length === 0 ? (
-                <EmptyState message="No medications scheduled for today" />
-              ) : (
-                todaySchedule.slice(0, 4).map((dose) => (
-                  <DoseCard
-                    key={dose.id}
-                    dose={dose}
-                    onTaken={() => markDoseTaken(dose)}
-                    onSkipped={() => markDoseSkipped(dose)}
-                  />
-                ))
-              )}
-            </div>
-          </section>
-
-          {/* Next Reminder */}
-          <section className="card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Next Reminder</h2>
-              {nextReminder && (
-                <span className="badge badge-primary">
-                  in {formatDistanceToNextReminder(nextReminder.scheduleTime)}
-                </span>
-              )}
-            </div>
-            {nextReminder ? (
-              <NextReminderCard dose={nextReminder} />
-            ) : (
-              <EmptyState message="No upcoming reminders" />
-            )}
-          </section>
-
-          {/* Adherence Status */}
-          <section className="card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Adherence</h2>
-              <Link href="/reports" className="text-primary-600 text-sm font-medium hover:underline flex items-center gap-1">
-                Details <ChevronRight className="w-4 h-4" />
-              </Link>
-            </div>
-            <AdherenceCard today={adherenceStatus.today} week={adherenceStatus.week} />
-          </section>
-
-          {/* Bottle Connection */}
-          <section className="card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Ol Bottle</h2>
-              <Link href="/bottle" className="text-primary-600 text-sm font-medium hover:underline flex items-center gap-1">
-                Settings <ChevronRight className="w-4 h-4" />
-              </Link>
-            </div>
-            <BottleStatusCard 
-              isConnected={bottleConnection.isConnected}
-              deviceName={bottleConnection.deviceName}
-              batteryLevel={bottleConnection.batteryLevel}
-              lastSync={bottleConnection.lastSync}
-            />
-          </section>
-        </div>
-
-        {/* Quick Actions */}
-        <section className="card p-5">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <QuickActionButton
-              icon={<Plus className="w-5 h-5" />}
-              label="Add Medication"
-              href="/medications/new"
-            />
-            <QuickActionButton
-              icon={<Clock className="w-5 h-5" />}
-              label="Schedule"
-              href="/schedule/new"
-            />
-            <QuickActionButton
-              icon={<Mic className="w-5 h-5" />}
-              label="Voice Prompt"
-              href="/voice/new"
-            />
-            <QuickActionButton
-              icon={<Lightbulb className="w-5 h-5" />}
-              label="LED Settings"
-              href="/led"
-            />
+      <main id="main" className="container-app pb-16 space-y-16">
+        {/* What it is */}
+        <section aria-labelledby="hero-title" className="pt-6 space-y-6">
+          <h1 id="hero-title" className="text-4xl font-bold leading-tight">
+            Tap an object.
+            <br />
+            Olvia shows what to do next.
+          </h1>
+          <p className="text-xl text-gray-700 max-w-prose">
+            Olvia puts small NFC stickers on everyday things, like a medicine
+            compartment. Hold your phone near one and the right instructions
+            appear, and are read out loud. No menus to search through.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Link href="/register" className="btn btn-primary btn-lg">
+              Get started
+            </Link>
+            <Link href="/login" className="btn btn-outline btn-lg">
+              I already have an account
+            </Link>
           </div>
         </section>
-      </div>
-    </DashboardLayout>
-  );
-}
 
-// Sub-components
+        {/* How it works */}
+        <section aria-labelledby="how-title" className="space-y-6">
+          <h2 id="how-title" className="text-3xl font-bold">
+            How it works
+          </h2>
+          <ol className="grid gap-4 sm:grid-cols-3">
+            <Step
+              number={1}
+              icon={Nfc}
+              title="Tap"
+              text="Hold the top of your phone against the Olvia sticker on the object."
+            />
+            <Step
+              number={2}
+              icon={Volume2}
+              title="Follow"
+              text="Olvia shows and says what to do, using your caregiver's own instructions."
+            />
+            <Step
+              number={3}
+              icon={CircleCheck}
+              title="Confirm"
+              text="Press one big button when you're done. Your caregiver can see it happened."
+            />
+          </ol>
+        </section>
 
-function QuickStatCard({
-  icon,
-  label,
-  value,
-  color,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  color: 'primary' | 'secondary' | 'success' | 'warning';
-}) {
-  const colors = {
-    primary: 'bg-primary-50 text-primary-600',
-    secondary: 'bg-secondary-50 text-secondary-600',
-    success: 'bg-success-50 text-success-600',
-    warning: 'bg-warning-50 text-warning-600',
-  };
-
-  return (
-    <div className="card p-4 flex items-center gap-3">
-      <div className={`p-2 rounded-lg ${colors[color]}`}>{icon}</div>
-      <div>
-        <p className="text-sm text-gray-500">{label}</p>
-        <p className="text-lg font-semibold text-gray-900">{value}</p>
-      </div>
-    </div>
-  );
-}
-
-function DoseCard({
-  dose,
-  onTaken,
-  onSkipped,
-}: {
-  dose: import('@/types').UpcomingDose;
-  onTaken: () => Promise<void>;
-  onSkipped: () => Promise<void>;
-}) {
-  const [busy, setBusy] = useState(false);
-
-  const statusIcons = {
-    pending: <Clock className="w-4 h-4 text-gray-400" />,
-    taken: <CheckCircle2 className="w-4 h-4 text-success-500" />,
-    missed: <XCircle className="w-4 h-4 text-error-500" />,
-    skipped: <AlertCircle className="w-4 h-4 text-warning-500" />,
-    taken_late: <Clock className="w-4 h-4 text-warning-500" />,
-  };
-
-  const needsAction = dose.status === 'pending' || dose.status === 'missed';
-
-  const run = async (action: () => Promise<void>) => {
-    setBusy(true);
-    try {
-      await action();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-        dose.status === 'taken' ? 'bg-success-100' : 'bg-primary-100'
-      }`}>
-        <Pill className={`w-5 h-5 ${dose.status === 'taken' ? 'text-success-600' : 'text-primary-600'}`} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-gray-900 truncate">{dose.medication.name}</p>
-        <p className="text-sm text-gray-500">
-          {dose.medication.dosage} {dose.medication.unit} • Compartment {dose.compartment}
-        </p>
-      </div>
-
-      {needsAction ? (
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">
-            {format(dose.scheduleTime, 'h:mm a')}
-          </span>
-          <button
-            onClick={() => run(onSkipped)}
-            disabled={busy}
-            className="p-2 rounded-lg hover:bg-warning-100 text-gray-400 hover:text-warning-600"
-            aria-label="Skip dose"
-          >
-            <AlertCircle className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => run(onTaken)}
-            disabled={busy}
-            className="p-2 rounded-lg hover:bg-success-100 text-gray-400 hover:text-success-600"
-            aria-label="Mark as taken"
-          >
-            <CheckCircle2 className="w-5 h-5" />
-          </button>
-        </div>
-      ) : (
-        <div className="text-right">
-          <p className="font-medium text-gray-900">{format(dose.scheduleTime, 'h:mm a')}</p>
-          {statusIcons[dose.status]}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function NextReminderCard({ dose }: { dose: import('@/types').UpcomingDose }) {
-  return (
-    <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 p-6 text-white">
-      <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-      <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
-      
-      <div className="relative z-10">
-        <div className="flex items-center gap-2 mb-2">
-          <Pill className="w-5 h-5" />
-          <span className="text-white/80">Next medication</span>
-        </div>
-        <h3 className="text-2xl font-semibold mb-1">{dose.medication.name}</h3>
-        <p className="text-white/90 mb-4">
-          {dose.medication.dosage} {dose.medication.unit}
-        </p>
-        
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4" />
-            <span className="text-lg font-medium">{format(dose.scheduleTime, 'h:mm a')}</span>
+        {/* NFC in plain words */}
+        <section aria-labelledby="nfc-title" className="card p-6 space-y-4">
+          <div className="flex items-center gap-3">
+            <Smartphone className="w-8 h-8 text-primary-700" aria-hidden="true" />
+            <h2 id="nfc-title" className="text-2xl font-bold">
+              What is NFC?
+            </h2>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-1 bg-white/20 rounded text-sm">
-              Compartment {dose.compartment}
-            </span>
+          <p className="text-lg text-gray-700">
+            NFC is the same short-range wireless used for tap-to-pay. An NFC sticker
+            has no battery. When your phone touches it, the phone powers the sticker
+            for a moment and reads a short web link stored on it. Most Android phones
+            and iPhones from 2018 onwards can do this.
+          </p>
+        </section>
+
+        {/* Privacy */}
+        <section aria-labelledby="privacy-title" className="card p-6 space-y-4">
+          <div className="flex items-center gap-3">
+            <ShieldCheck className="w-8 h-8 text-primary-700" aria-hidden="true" />
+            <h2 id="privacy-title" className="text-2xl font-bold">
+              Nothing private is stored on a sticker
+            </h2>
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+          <p className="text-lg text-gray-700">
+            A sticker only holds a link that names the object, such as
+            &ldquo;morning medicine&rdquo;. Your medicine names, doses and contacts stay
+            in your Olvia account and only appear after you sign in. A lost or copied
+            sticker reveals nothing about you.
+          </p>
+        </section>
 
-function AdherenceCard({
-  today,
-  week,
-}: {
-  today: { taken: number; total: number; percentage: number };
-  week: { taken: number; total: number; percentage: number };
-}) {
-  return (
-    <div className="space-y-4">
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-gray-600">Today</span>
-          <span className="text-sm font-medium text-gray-900">
-            {today.taken}/{today.total} doses
-          </span>
-        </div>
-        <ProgressBar percentage={today.percentage} color="primary" />
-      </div>
-      
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-gray-600">This Week</span>
-          <span className="text-sm font-medium text-gray-900">
-            {week.taken}/{week.total} doses ({week.percentage}%)
-          </span>
-        </div>
-        <ProgressBar percentage={week.percentage} color="success" />
-      </div>
-    </div>
-  );
-}
-
-function ProgressBar({
-  percentage,
-  color,
-}: {
-  percentage: number;
-  color: 'primary' | 'success' | 'warning' | 'error';
-}) {
-  const colors = {
-    primary: 'bg-primary-500',
-    success: 'bg-success-500',
-    warning: 'bg-warning-500',
-    error: 'bg-error-500',
-  };
-
-  return (
-    <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-      <div
-        className={`h-full ${colors[color]} rounded-full transition-all duration-500`}
-        style={{ width: `${percentage}%` }}
-      />
-    </div>
-  );
-}
-
-function BottleStatusCard({
-  isConnected,
-  deviceName,
-  batteryLevel,
-  lastSync,
-}: {
-  isConnected: boolean;
-  deviceName?: string;
-  batteryLevel?: number;
-  lastSync?: Date | null;
-}) {
-  return (
-    <div className="flex items-center gap-4">
-      <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${
-        isConnected ? 'bg-success-100' : 'bg-gray-100'
-      }`}>
-        <Bluetooth className={`w-7 h-7 ${isConnected ? 'text-success-600' : 'text-gray-400'}`} />
-      </div>
-      <div className="flex-1">
-        <div className="flex items-center gap-2">
-          <span className={`status-dot ${isConnected ? 'status-dot-online' : 'status-dot-offline'}`} />
-          <span className="font-medium text-gray-900">
-            {isConnected ? (deviceName || 'Ol Bottle') : 'Not Connected'}
-          </span>
-        </div>
-        {isConnected && batteryLevel !== undefined && (
-          <div className="flex items-center gap-2 mt-1">
-            <Battery className="w-4 h-4 text-gray-500" />
-            <span className="text-sm text-gray-600">{batteryLevel}%</span>
-            {lastSync && (
-              <span className="text-sm text-gray-400">
-                • Synced {formatDistanceToNow(lastSync)} ago
-              </span>
-            )}
+        {/* Who it's for */}
+        <section aria-labelledby="who-title" className="space-y-4">
+          <h2 id="who-title" className="text-3xl font-bold">
+            Made for two people
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="card p-6">
+              <h3 className="text-xl font-bold mb-2">The person using Olvia</h3>
+              <p className="text-gray-700">
+                Sees today&rsquo;s routine, taps objects for guidance, and confirms
+                with one button. Large text and spoken instructions throughout.
+              </p>
+            </div>
+            <div className="card p-6">
+              <div className="flex items-center gap-2 mb-2">
+                <HeartHandshake className="w-6 h-6 text-secondary-600" aria-hidden="true" />
+                <h3 className="text-xl font-bold">The caregiver</h3>
+              </div>
+              <p className="text-gray-700">
+                Sets up the routine and instructions, and can see at a glance what
+                was done today and what was missed.
+              </p>
+            </div>
           </div>
-        )}
-      </div>
-      {!isConnected && (
-        <Link href="/bottle/connect" className="btn btn-primary btn-sm">
-          Connect
-        </Link>
-      )}
-    </div>
-  );
-}
+        </section>
+      </main>
 
-function QuickActionButton({
-  icon,
-  label,
-  href,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  href: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="flex flex-col items-center gap-2 p-4 rounded-xl border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-all"
-    >
-      <div className="p-2 rounded-full bg-primary-100 text-primary-600">
-        {icon}
-      </div>
-      <span className="text-sm font-medium text-gray-700">{label}</span>
-    </Link>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-8 text-gray-500">
-      <AlertCircle className="w-8 h-8 mb-2" />
-      <p>{message}</p>
-    </div>
-  );
-}
-
-function LoginPrompt() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="card max-w-md w-full p-8 text-center">
-        <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Pill className="w-8 h-8 text-primary-600" />
-        </div>
-        <h1 className="text-2xl font-display font-semibold text-gray-900 mb-2">
-          Welcome to Olvia
-        </h1>
-        <p className="text-gray-600 mb-6">
-          Your smart medication assistant. Connect with your Ol bottle to manage medications, track adherence, and receive personalized reminders.
+      <footer className="border-t border-stone-200">
+        <p className="container-app py-8 text-gray-700">
+          Olvia is an assistive companion. It shows the information your caregiver
+          enters. It does not diagnose, decide doses, or replace a doctor or caregiver.
         </p>
-        <div className="space-y-3">
-          <Link href="/login" className="btn btn-primary w-full">
-            Sign In
-          </Link>
-          <Link href="/register" className="btn btn-outline w-full">
-            Create Account
-          </Link>
-        </div>
-      </div>
+      </footer>
     </div>
   );
 }
 
-function formatDistanceToNextReminder(date: Date): string {
-  const minutes = differenceInMinutes(date, new Date());
-  if (minutes < 60) {
-    return `${minutes} min`;
-  }
-  const hours = Math.floor(minutes / 60);
-  return `${hours} hr`;
+function Step({
+  number,
+  icon: Icon,
+  title,
+  text,
+}: {
+  number: number;
+  icon: typeof Nfc;
+  title: string;
+  text: string;
+}) {
+  return (
+    <li className="card p-6 space-y-3">
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden="true"
+          className="w-10 h-10 rounded-full bg-primary-700 text-white font-bold flex items-center justify-center"
+        >
+          {number}
+        </span>
+        <Icon className="w-7 h-7 text-primary-700" aria-hidden="true" />
+      </div>
+      <h3 className="text-xl font-bold">
+        <span className="sr-only">Step {number}: </span>
+        {title}
+      </h3>
+      <p className="text-gray-700">{text}</p>
+    </li>
+  );
 }

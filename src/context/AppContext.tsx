@@ -14,9 +14,6 @@ import {
   MedicationSchedule,
   MedicationIntake,
   VoicePrompt,
-  BottleDevice,
-  BottleState,
-  Notification,
   DashboardData,
   UpcomingDose,
   DayOfWeek,
@@ -24,13 +21,7 @@ import {
 } from '@/types';
 import { useAuth } from './AuthContext';
 import * as db from '@/services/firestore';
-import {
-  bleService,
-  BottleEvent,
-  BottleStatus,
-  ConnectionState,
-  EventCode,
-} from '@/services/ble';
+import { isMedicationSlot } from '@/lib/nfcTags';
 
 const DAY_NAMES: DayOfWeek[] = [
   'sunday',
@@ -76,36 +67,10 @@ interface AppContextType {
   ) => Promise<void>;
   deleteVoicePrompt: (id: string) => Promise<void>;
 
-  bottleState: BottleState;
-  connectionState: ConnectionState;
-  isBluetoothSupported: boolean;
-  connectBottle: () => Promise<void>;
-  connectSimulatedBottle: () => Promise<void>;
-  disconnectBottle: () => Promise<void>;
-  pushScheduleToBottle: () => Promise<void>;
-  dispenseNow: (compartment: number, doseId: number) => Promise<void>;
-  testLED: (
-    compartment: number,
-    intensity: 'low' | 'medium' | 'high',
-    speed: 'slow' | 'medium' | 'fast'
-  ) => Promise<void>;
-  testBuzzer: () => Promise<void>;
-
-  notifications: Notification[];
-  markNotificationRead: (id: string) => Promise<void>;
-  markAllNotificationsRead: () => Promise<void>;
-
   dashboardData: DashboardData;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
-
-const EMPTY_BOTTLE_STATE: BottleState = {
-  device: null,
-  isScanning: false,
-  compartments: [],
-  lastSync: null,
-};
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -115,10 +80,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [schedules, setSchedules] = useState<MedicationSchedule[]>([]);
   const [intakes, setIntakes] = useState<MedicationIntake[]>([]);
   const [voicePrompts, setVoicePrompts] = useState<VoicePrompt[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [bottleState, setBottleState] = useState<BottleState>(EMPTY_BOTTLE_STATE);
-  const [connectionState, setConnectionState] =
-    useState<ConnectionState>('disconnected');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
@@ -137,7 +98,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setSchedules([]);
       setIntakes([]);
       setVoicePrompts([]);
-      setNotifications([]);
       setIsLoading(false);
       return;
     }
@@ -162,146 +122,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       db.subscribeSchedules(userId, setSchedules, fail),
       db.subscribeIntakes(userId, since, setIntakes, fail),
       db.subscribeVoicePrompts(userId, setVoicePrompts, fail),
-      db.subscribeNotifications(userId, setNotifications, fail),
     ];
-
-    db.getSavedDevice(userId)
-      .then((device) => {
-        if (device) setBottleState((prev) => ({ ...prev, device }));
-      })
-      .catch(() => {
-        /* no paired bottle yet */
-      });
 
     return () => unsubs.forEach((u) => u());
   }, [userId]);
 
-  // ------------------------------------------------------------ bottle events
-
-  const handleBottleEvent = useCallback(
-    async (event: BottleEvent) => {
-      if (!userId) return;
-
-      switch (event.type) {
-        case EventCode.PILL_REMOVED:
-        case EventCode.DISPENSE_COMPLETE: {
-          // Attribute the event to whichever dose slot it lands nearest.
-          const dose = findNearestDose(schedules, medications, event.timestamp, event.compartment);
-          if (!dose) return;
-
-          await db.recordIntake(userId, {
-            scheduleId: dose.scheduleId,
-            medicationId: dose.medication.id,
-            userId,
-            scheduledTime: dose.scheduleTime,
-            actualTime: event.timestamp,
-            status: 'taken',
-            compartment: event.compartment,
-            confirmedBy: 'sensor',
-            sensorData: {
-              compartmentOpened: true,
-              shelfSlideMotion: false,
-              pillRemovalDetected: event.type === EventCode.PILL_REMOVED,
-              timestamp: event.timestamp,
-            },
-          });
-
-          await db.createNotification(userId, {
-            type: 'medication_taken',
-            title: 'Medication taken',
-            message: `${dose.medication.name} taken from compartment ${event.compartment}`,
-            isRead: false,
-          });
-          break;
-        }
-
-        case EventCode.DISPENSE_FAILED: {
-          await db.createNotification(userId, {
-            type: 'system',
-            title: 'Dispense failed',
-            message: `Compartment ${event.compartment}: ${event.failureReason ?? 'unknown error'}`,
-            isRead: false,
-          });
-          break;
-        }
-
-        case EventCode.COMPARTMENT_EMPTY: {
-          await db.createNotification(userId, {
-            type: 'system',
-            title: 'Compartment empty',
-            message: `Compartment ${event.compartment} needs refilling`,
-            isRead: false,
-          });
-          break;
-        }
-
-        case EventCode.BATTERY: {
-          const level = event.batteryLevel ?? 0;
-          setBottleState((prev) => ({
-            ...prev,
-            device: prev.device
-              ? { ...prev.device, batteryLevel: level }
-              : prev.device,
-          }));
-          if (level <= 15) {
-            await db.createNotification(userId, {
-              type: 'battery_low',
-              title: 'Low battery',
-              message: `Ol bottle battery is at ${level}%`,
-              isRead: false,
-            });
-          }
-          break;
-        }
-
-        case EventCode.REMINDER_FIRED: {
-          const dose = findNearestDose(schedules, medications, event.timestamp, event.compartment);
-          await db.createNotification(userId, {
-            type: 'medication_upcoming',
-            title: 'Reminder',
-            message: dose
-              ? `Time to take ${dose.medication.name}`
-              : `Reminder for compartment ${event.compartment}`,
-            isRead: false,
-          });
-          break;
-        }
-      }
-    },
-    [userId, schedules, medications]
-  );
-
-  useEffect(() => {
-    const offEvent = bleService.onEvent(handleBottleEvent);
-    const offState = bleService.onStateChange(setConnectionState);
-    const offStatus = bleService.onStatus((status: BottleStatus) => {
-      setBottleState((prev) => ({
-        ...prev,
-        lastSync: new Date(),
-        compartments: Array.from({ length: 6 }, (_, i) => ({
-          number: i + 1,
-          isOpen: status.lidOpen,
-          hasPills: status.loadedCompartments.includes(i + 1),
-        })),
-        device: prev.device
-          ? {
-              ...prev.device,
-              batteryLevel: status.batteryLevel,
-              firmwareVersion: status.firmwareVersion,
-              isConnected: true,
-            }
-          : prev.device,
-      }));
-    });
-
-    return () => {
-      offEvent();
-      offState();
-      offStatus();
-    };
-  }, [handleBottleEvent]);
-
-  // ------------------------------------------------------------------ actions
+// ------------------------------------------------------------------ actions
 
   const requireUser = useCallback((): string => {
     if (!userId) throw new Error('You must be signed in to do that');
@@ -363,7 +189,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         scheduledTime: dose.scheduleTime,
         actualTime: new Date(),
         status,
-        compartment: dose.compartment,
+        slot: dose.slot,
         confirmedBy: 'user',
       });
     },
@@ -391,97 +217,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.deleteVoicePrompt(id);
   }, []);
 
-  const markNotificationRead = useCallback(async (id: string) => {
-    await db.markNotificationRead(id);
-  }, []);
-
-  const markAllNotificationsRead = useCallback(async () => {
-    await db.markAllNotificationsRead(requireUser());
-  }, [requireUser]);
-
-  // ------------------------------------------------------------------- bottle
-
-  const pushScheduleToBottle = useCallback(async () => {
-    if (!bleService.isConnected()) throw new Error('Bottle is not connected');
-    await bleService.pushSchedule(schedules);
-    setBottleState((prev) => ({ ...prev, lastSync: new Date() }));
-  }, [schedules]);
-
-  const establishBottle = useCallback(
-    async (open: () => Promise<boolean>, name: string) => {
-      const uid = requireUser();
-      await open();
-
-      const status = await bleService.readStatus();
-      const device: BottleDevice = {
-        id: 'ol-bottle',
-        name,
-        macAddress: '',
-        batteryLevel: status?.batteryLevel ?? 0,
-        firmwareVersion: status?.firmwareVersion ?? '',
-        isConnected: true,
-        lastSeen: new Date(),
-        rssi: 0,
-      };
-
-      setBottleState((prev) => ({ ...prev, device, lastSync: new Date() }));
-      await db.saveDevice(uid, device);
-
-      // The bottle must hold the schedule itself to fire reminders unattended.
-      await bleService.pushSchedule(schedules);
-    },
-    [requireUser, schedules]
-  );
-
-  const connectBottle = useCallback(
-    () => establishBottle(() => bleService.connect(), 'Ol Bottle'),
-    [establishBottle]
-  );
-
-  const connectSimulatedBottle = useCallback(
-    () =>
-      establishBottle(
-        () => bleService.connectSimulated(),
-        'Ol Bottle (simulated)'
-      ),
-    [establishBottle]
-  );
-
-  const disconnectBottle = useCallback(async () => {
-    await bleService.disconnect();
-    setBottleState((prev) => ({
-      ...prev,
-      device: prev.device ? { ...prev.device, isConnected: false } : null,
-    }));
-  }, []);
-
-  const dispenseNow = useCallback(
-    async (compartment: number, doseId: number) => {
-      await bleService.dispense(compartment, doseId);
-    },
-    []
-  );
-
-  const testLED = useCallback(
-    async (
-      compartment: number,
-      intensity: 'low' | 'medium' | 'high',
-      speed: 'slow' | 'medium' | 'fast'
-    ) => {
-      await bleService.setLED(compartment, intensity, speed);
-    },
-    []
-  );
-
-  const testBuzzer = useCallback(async () => {
-    await bleService.buzz(1000);
-  }, []);
-
   // ---------------------------------------------------------------- dashboard
 
   const dashboardData = useMemo<DashboardData>(
-    () => buildDashboard(schedules, medications, intakes, notifications, bottleState, now),
-    [schedules, medications, intakes, notifications, bottleState, now]
+    () => buildDashboard(schedules, medications, intakes, now),
+    [schedules, medications, intakes, now]
   );
 
   const value: AppContextType = {
@@ -501,19 +241,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     voicePrompts,
     addVoicePrompt,
     deleteVoicePrompt,
-    bottleState,
-    connectionState,
-    isBluetoothSupported: bleService.isSupported(),
-    connectBottle,
-    connectSimulatedBottle,
-    disconnectBottle,
-    pushScheduleToBottle,
-    dispenseNow,
-    testLED,
-    testBuzzer,
-    notifications,
-    markNotificationRead,
-    markAllNotificationsRead,
     dashboardData,
   };
 
@@ -547,6 +274,8 @@ function expandDoses(
 
   for (const schedule of schedules) {
     if (!schedule.isActive) continue;
+    // Schedules saved before the NFC redesign have no compartment tag.
+    if (!isMedicationSlot(schedule.slot)) continue;
     if (!schedule.daysOfWeek.includes(dayName)) continue;
 
     const medication = medications.find((m) => m.id === schedule.medicationId);
@@ -576,8 +305,9 @@ function expandDoses(
         scheduleId: schedule.id,
         medication,
         scheduleTime,
-        label: schedule.customLabel || schedule.label,
-        compartment: schedule.compartment,
+        slot: schedule.slot,
+        tagColor: schedule.tagColor,
+        caregiverInstruction: schedule.caregiverInstruction,
         status,
       });
     }
@@ -585,25 +315,6 @@ function expandDoses(
 
   return doses.sort(
     (a, b) => a.scheduleTime.getTime() - b.scheduleTime.getTime()
-  );
-}
-
-function findNearestDose(
-  schedules: MedicationSchedule[],
-  medications: Medication[],
-  at: Date,
-  compartment: number
-): UpcomingDose | null {
-  const candidates = expandDoses(schedules, medications, [], at, at).filter(
-    (d) => d.compartment === compartment
-  );
-  if (candidates.length === 0) return null;
-
-  return candidates.reduce((closest, dose) =>
-    Math.abs(dose.scheduleTime.getTime() - at.getTime()) <
-    Math.abs(closest.scheduleTime.getTime() - at.getTime())
-      ? dose
-      : closest
   );
 }
 
@@ -623,8 +334,6 @@ function buildDashboard(
   schedules: MedicationSchedule[],
   medications: Medication[],
   intakes: MedicationIntake[],
-  notifications: Notification[],
-  bottleState: BottleState,
   now: Date
 ): DashboardData {
   const todaySchedule = expandDoses(schedules, medications, intakes, now, now);
@@ -641,13 +350,6 @@ function buildDashboard(
       (d) => d.status === 'pending' && d.scheduleTime.getTime() > now.getTime()
     ) ?? null;
 
-  const nextDoseIn = nextReminder
-    ? Math.max(
-        0,
-        Math.round((nextReminder.scheduleTime.getTime() - now.getTime()) / 60000)
-      )
-    : 0;
-
   return {
     todaySchedule,
     nextReminder,
@@ -655,44 +357,5 @@ function buildDashboard(
       today: adherenceOf(todaySchedule),
       week: adherenceOf(weekDoses),
     },
-    bottleConnection: {
-      isConnected: bottleState.device?.isConnected ?? false,
-      deviceName: bottleState.device?.name,
-      batteryLevel: bottleState.device?.batteryLevel,
-      lastSync: bottleState.lastSync,
-    },
-    notifications: notifications.filter((n) => !n.isRead),
-    quickStats: {
-      totalMedications: medications.length,
-      activeSchedules: schedules.filter((s) => s.isActive).length,
-      streakDays: computeStreak(schedules, medications, intakes, now),
-      nextDoseIn,
-    },
   };
-}
-
-/** Consecutive days back from yesterday where every scheduled dose was taken. */
-function computeStreak(
-  schedules: MedicationSchedule[],
-  medications: Medication[],
-  intakes: MedicationIntake[],
-  now: Date
-): number {
-  let streak = 0;
-
-  for (let i = 1; i <= 14; i++) {
-    const day = new Date(now);
-    day.setDate(day.getDate() - i);
-
-    const doses = expandDoses(schedules, medications, intakes, day, now);
-    if (doses.length === 0) continue;
-
-    const allTaken = doses.every(
-      (d) => d.status === 'taken' || d.status === 'taken_late'
-    );
-    if (!allTaken) break;
-    streak++;
-  }
-
-  return streak;
 }

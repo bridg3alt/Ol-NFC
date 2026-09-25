@@ -73,10 +73,10 @@ export default function RegisterPage() {
 
         <div className="relative z-10">
           <h1 className="text-4xl font-display font-bold text-white mb-4">
-            Join Thousands<br />of Caregivers
+            Set up Olvia<br />together
           </h1>
           <p className="text-white/80 text-lg max-w-md">
-            Create your account and start providing better care with personalized medication management.
+            Create one account for the person using Olvia and one for their caregiver.
           </p>
         </div>
 

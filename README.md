@@ -3,186 +3,107 @@
 
   # Olvia
 
-  **A caregiver-connected medication assistant for the Ol smart bottle.**
+  **Tap an object. Your phone shows what to do next.**
 
-  Personalised reminders, sensor-confirmed adherence tracking, and automatic
-  pill dispensing — built for elderly and neurodivergent users who find
-  standard pillboxes and phone alarms unusable.
+  An NFC-based assistive companion for people who find standard pillboxes,
+  phone alarms and app menus hard to use, and for the caregivers who support them.
 
   <sub>Built for STRIDE Makeathon 2025 · IEEE Kerala Section · K-DISC</sub>
 </div>
 
 ---
 
-## The problem
+## The idea
 
-India has over 8 million children with developmental disabilities and millions
-of elderly people with cognitive or motor impairment. Standard water bottles,
-separate pillboxes, and phone alarms fail them: bottles are too heavy to lift,
-pill timings are confusing, and jarring alarms cause sensory aversion.
-
-Olvia combines hydration, pill organisation, and sensory-friendly reminders in
-one device — co-created with users at BUDS schools and eldercare homes in
-Kerala.
-
-## Try it without hardware
-
-**The whole system runs in your browser.** A virtual bottle implements the same
-BLE protocol as the firmware, so you can exercise dispensing, sensors, offline
-sync, and failure handling with no ESP32 on your desk.
-
-```bash
-npm install
-cp .env.example .env      # add your Firebase web config
-npm run dev
+```
+Physical object → NFC tap → Smartphone → Olvia web app → The right screen
 ```
 
-Then open the **Bottle** page and click **"Connect simulated bottle"**.
+Small NFC stickers go on everyday objects: the medicine bottle, each
+compartment, later the water bottle. A sticker stores **only a link**, such as
+`https://<your-domain>/nfc/MED_MORNING`. Tapping it opens the matching Olvia
+screen, with instructions shown in large text and read aloud.
 
-From the simulator panel you can:
+Every interaction follows one pattern: **TAP → IDENTIFY → GUIDE → CONFIRM → RECORD**.
 
-- take a pill from any compartment — fires the sensor events that confirm intake
-- force failures: jam, empty compartment, servo timeout, lid open
-- drain the battery, open the lid, drop the connection
-- advance the bottle's clock to reach a scheduled dose immediately
+### Medicine flow
 
-Two flows worth trying, because they are the hard ones to test on real hardware:
+1. At the scheduled time an alarm rings in the app.
+2. The user taps the **bottle** sticker to stop it, which shows they are at the bottle.
+3. Olvia speaks the caregiver's instruction: *"Morning medicine. It is in the
+   compartment with the blue sticker. Tap the blue sticker."*
+4. The user taps a compartment sticker. The wrong one: "Wrong compartment", and
+   the instruction repeats. The right one: a large **I've taken it** button appears.
+5. Pressing it records the dose. The caregiver's overview updates.
 
-| Flow | How |
+## Why nothing private goes on a sticker
+
+Anyone with a phone can read or copy an NFC sticker. So a sticker only says
+*which object* it is (`MED_MORNING`). Medicine names, doses and contacts live in
+Firestore, and security rules release them only to the signed-in user and their
+linked caregiver. A lost sticker reveals nothing.
+
+## Tech stack
+
+| Part | Choice |
 |---|---|
-| **Offline queue** | Drop the connection, take a pill, reconnect. The event is recorded on the bottle, replayed on sync, and lands in the database. |
-| **Auto-dispense** | Create a schedule with auto-dispense enabled, push it to the bottle, then advance the clock. The bottle fires the reminder and dispenses on its own. |
+| Framework | Next.js 14 (App Router), React 18, TypeScript |
+| Styling | Tailwind CSS, Atkinson Hyperlegible font |
+| Auth + database | Firebase Authentication, Cloud Firestore |
+| Voice | Browser text-to-speech (`speechSynthesis`) |
+| NFC | Tag URLs (all phones) + Web NFC (Chrome on Android) |
+| Hosting | Vercel |
 
-The simulator speaks the real 20-byte frames and connects through the same
-session path as hardware, so the protocol encoding, event parsing, ack
-handling, and reconnect logic are all genuinely exercised.
-
-## Features
-
-- **Medication and schedule management** — times, days, compartments, and the
-  BB/AB/BL/AL/BD/AD meal labels users already recognise
-- **Sensor-confirmed adherence** — a dose counts as taken when the compartment
-  sensor sees the pill leave, not when the clock passes
-- **Multi-modal reminders** — LED, buzzer, vibration, and recorded voice, so
-  the prompt can be tuned to what a given user tolerates
-- **Caregiver voice prompts** — a familiar voice measurably improves compliance
-- **Adherence reports** — daily and per-medication breakdowns with a dose log
-- **Accessibility controls** — font size, high contrast, dyslexia-friendly
-  fonts, text spacing, line height, and a larger cursor
-- **Offline-tolerant sync** — the bottle holds its own schedule and event
-  queue, so reminders fire and intakes record with no phone present
-
-## Architecture
+## Project structure
 
 ```
 src/
-├── app/                    Next.js App Router pages
-│   ├── page.tsx            Dashboard — today's doses, adherence, bottle status
-│   ├── medications/        Medication CRUD
-│   ├── schedule/           Schedule builder (times, days, reminders, dispensing)
-│   ├── voice/              Voice prompt recording
-│   ├── led/                Per-schedule LED display settings
-│   ├── bottle/             Pairing, schedule sync, hardware tests, simulator
-│   ├── reports/            Adherence over time
-│   ├── settings/           Profile and accessibility defaults
-│   └── help/               FAQs and safety guidance
-├── components/
-│   ├── BottleSimulator.tsx Virtual bottle control panel
-│   ├── AuthGuard.tsx       Route protection
-│   └── layout/             Dashboard chrome, navigation, accessibility panel
-├── context/
-│   ├── AuthContext.tsx     Session state
-│   └── AppContext.tsx      Data subscriptions, dose computation, bottle events
-├── services/
-│   ├── ble.ts              BLE protocol v1 client
-│   ├── bleSimulator.ts     Virtual bottle (same protocol, no hardware)
-│   ├── firestore.ts        Data layer — CRUD and realtime subscriptions
-│   ├── firebase.ts         Auth
-│   └── voiceRecording.ts   Microphone capture
-└── types/                  Shared domain types
-
-firmware/
-├── PROTOCOL.md             BLE service, characteristics, frame layouts
-└── olvia_esp32/            ESP32 sketch — servos, sensors, event queue
+├── app/                    Pages (each folder is a URL)
+│   ├── page.tsx            Landing page, or redirect to your home when signed in
+│   ├── today/              User home: today's routine
+│   ├── caregiver/          Caregiver overview
+│   ├── schedule/           Caregiver: routine setup (medicine, compartment, time, sticker colour)
+│   ├── medications/        Medicine list and form
+│   ├── help/  settings/  login/  register/  reports/  voice/
+├── components/             Layout and reusable UI (status badges, tag colour)
+├── context/                Auth, app data, display preferences
+├── lib/nfcTags.ts          The list of NFC tag ids and what each one means
+├── services/               Firebase setup and Firestore reads/writes
+└── types/                  Shared TypeScript types
 ```
 
-**Stack:** Next.js 14 · TypeScript · Tailwind CSS · Firebase (Auth + Firestore)
-· Web Bluetooth · ESP32
+## Run it locally
 
-### Design notes
+See [SETUP.md](SETUP.md) for the Firebase steps, then:
 
-**Doses are computed, not stored.** Schedules expand into concrete dose slots on
-read and are folded against recorded intakes. A slot with no record is pending
-until it is an hour late, then counts as missed. This keeps a schedule edit from
-rewriting history.
+```bash
+npm install
+cp .env.example .env      # paste your Firebase web config
+npm run dev
+```
 
-**Intakes are idempotent.** Each record is keyed by user, schedule, and slot
-time, so a replayed bottle event or a double tap updates one document instead of
-inflating adherence.
-
-**Events are acked after persistence.** The bottle holds an event until the app
-confirms it was stored, so a failed write replays rather than silently dropping
-a dose.
-
-## Setup
-
-See **[SETUP.md](SETUP.md)** for Firebase configuration, security rules
-deployment, firmware flashing, and pairing.
-
-Short version:
-
-1. Enable Authentication and Firestore in the Firebase console
-2. `firebase deploy --only firestore:rules,firestore:indexes`
-3. `npm run dev`
-
-Firebase Storage is deliberately unused — it requires a paid plan. Voice
-recordings are stored inline in Firestore, keeping the project on the free tier.
-
-## Hardware
-
-The current prototype is 3D-printed with a six-compartment pill column, a
-650 ml water chamber, a flexible steel straw, and ergonomic side grips.
-
-The IoT build targets an **ESP32** (the original Arduino Nano has no radio),
-with a micro servo and IR break-beam sensor per compartment, plus a lid switch,
-LED, buzzer, and vibration motor. Pin assignments are declared at the top of the
-sketch.
-
-> The firmware compiles but has not yet been verified on physical hardware.
-> Treat it as a working draft.
+Open http://localhost:3000.
 
 ## Status
 
-**Working:** authentication, medication and schedule management, dose tracking,
-adherence reports, voice prompts, accessibility controls, BLE protocol client,
-bottle simulator, security rules.
+- [x] Phase 1: foundation, landing page, role-based navigation, accessible design
+- [ ] Phase 2: caregiver ↔ user linking, routine setup for the linked user
+- [ ] Phase 3: today dashboard
+- [ ] Phase 4: NFC routing (`/nfc/<TAG_ID>`)
+- [ ] Phase 5: medicine alarm, guidance and confirmation
+- [ ] Phase 6: caregiver overview
+- [ ] Phase 7–8: deployment and physical NFC testing
+- [ ] Phase 9: hydration
+- [ ] Phase 10: emergency profile
 
-**Not yet built:**
+## Limitations
 
-- Push notifications (FCM) — in-app notifications only, so alerts need the app open
-- Server-side missed-dose watcher — doses show as missed in the UI, but nothing
-  reaches a caregiver while the app is closed
-- Caregiver linking UI — the data model and rules support it, the screen does not exist
+Olvia is an assistive companion. It shows what a caregiver has entered. It does
+not diagnose, decide doses, or replace a doctor or caregiver.
 
-**Platform limits:** Web Bluetooth requires Chrome, Edge, or Opera on desktop or
-Android. Safari and iOS are not supported.
-
-## Safety
-
-Olvia supports a medication routine — it does not replace medical advice.
-
-Automatic dispensing releases medication unattended and is **off by default**.
-Before enabling it with a real person, bench-test every failure path with dummy
-pills: jam, empty compartment, lid open, and the repeat-dispense cooldown. The
-device cannot verify who takes a dispensed pill.
-
-## Team
-
-Team Olvia — Brigit Thomas (lead), Asil Muhammed Naseer, Jeevan Martin,
-Vismaya V Menon, Aarwin Augustin, Madhavi Krishna P S
-
-Faculty mentor: Mr. Anil Antony · STRIDE mentor: Ms. Anjali Prasad
+A web page cannot ring an alarm while the browser is closed or the phone is
+locked. For now the app must stay open on the phone during the day.
 
 ## License
 
-[MIT](LICENSE)
+MIT

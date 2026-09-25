@@ -70,6 +70,16 @@ export function initializeFirebase() {
   }
 }
 
+/**
+ * Firestore rejects a document containing any undefined field, and email
+ * accounts have no photoURL or phoneNumber. Strip them before every write.
+ */
+function withoutUndefined<T extends object>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== undefined)
+  ) as Partial<T>;
+}
+
 function defaultSettings(): UserSettings {
   return {
     language: 'en',
@@ -177,7 +187,7 @@ class FirebaseAuthService {
       }
 
       await setDoc(doc(this.db, 'users', firebaseUser.uid), {
-        ...fallback,
+        ...withoutUndefined(fallback),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -296,7 +306,7 @@ class FirebaseAuthService {
         // to read on the next load.
         const profile = defaultProfileFor(firebaseUser);
         await setDoc(doc(this.db!, 'users', firebaseUser.uid), {
-          ...profile,
+          ...withoutUndefined(profile),
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -327,7 +337,7 @@ class FirebaseAuthService {
     }
 
     await updateDoc(doc(this.db, 'users', userId), {
-      ...data,
+      ...withoutUndefined(data),
       updatedAt: serverTimestamp(),
     });
   }
